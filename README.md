@@ -1,6 +1,13 @@
 # gchat
 a (currently terminal text-only interface) version of gchat
 
+dependencies
+client
+  sudo apt-get install python-urwid
+  sudo pip install -U  socketIO-client
+server
+
+
 TODO:
 barebones node server
   - open socket connection with each user (opens on opening of client)
