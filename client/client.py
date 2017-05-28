@@ -302,7 +302,18 @@ class MainWindow(object):
         self.state = MainWindow.LOGIN
         self.process_state()
 
+    def open_chat(self, user):
+        pass
+
+    def update_status(self, status):
+        pass
+
+    def send_chat(self, msg):
+        pass
+
     def transition_state(self, text):
+        old_state = self.state
+
         if self.state == MainWindow.START:
             if text == 'login':
                 self.state = MainWindow.LOGIN
@@ -326,7 +337,18 @@ class MainWindow(object):
                 self.state = MainWindow.LOGIN_PASSWORD
         elif self.state == MainWindow.LOGIN_PASSWORD:
             self.sock.login(self.username, text, self)
-        self.process_state()
+        elif self.state == MainWindow.MAIN:
+            if text.startswith('\\chat'):
+                user = text.split('\\chat')[1].strip()
+                self.open_chat(user)
+            if text.startswith('\\status'):
+                status = text.split('\\status')[1].strip()
+                self.update_status(status)
+            else:
+                self.send_chat(text)
+
+        if self.state != old_state:
+            self.process_state()
 
     def draw_interface(self):
         self.main_loop.draw_screen()
