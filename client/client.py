@@ -16,8 +16,9 @@ import urwid
 from urwid import MetaSignals
 
 from client_api import Socket
-# import logging
-logging.getLogger('socketIO-client').setLevel(logging.DEBUG)
+
+# Uncomment for debug
+# logging.getLogger('socketIO-client').setLevel(logging.DEBUG)
 logging.basicConfig()
 
 log = open('log.txt', 'w')
@@ -151,7 +152,7 @@ class MainWindow(object):
         self.ui = urwid.raw_display.Screen()
         self.ui.register_palette(self._palette)
         self.state = MainWindow.START
-        self.sock = Socket()
+        self.sock = Socket(self)
         self.build_interface()
         self.ui.run_wrapper(self.run)
 
@@ -198,6 +199,8 @@ class MainWindow(object):
         try:
             self.main_loop.run()
         except KeyboardInterrupt:
+            self.sock.should_stop = True
+            self.sock.listener.join()
             self.quit()
 
 
@@ -264,12 +267,23 @@ class MainWindow(object):
         if self.state == MainWindow.MAIN:
             self.divider.set_text(("divider", 
                 "Welcome, {0}!".format(self.username)))
+            # 3 columns - chat, chat, contacts
+            chat1_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
+            chat2_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
+            contacts_col = urwid.Filler(urwid.Text(self.username), valign='top')
+            self.context.body.body = urwid.Columns([
+                chat1_col, chat2_col, contacts_col])
 
     def accept_login(self):
         self.state = MainWindow.MAIN
+        self.process_state()
+        log.write('accept\n')
+        log.flush()
+        # self.sock.listener.start() # this is terrible
 
     def reject_login(self):
         self.state = MainWindow.LOGIN
+        self.process_state()
 
     def transition_state(self, text):
         if self.state == MainWindow.START:

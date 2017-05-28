@@ -51,6 +51,7 @@ var io = require('socket.io')(app);
 
 io.on('connection', function(socket) {
   console.log("CONNECTION!");
+  var username = false;
   socket.on('login', function(data) {
     var d = JSON.parse(data);
     var user = d['username'];
@@ -58,14 +59,29 @@ io.on('connection', function(socket) {
     userCollection.find({username:user, password:pass}).toArray(function(err, results){
         if (results.length) {
             console.log('success');
-            socket.emit('login', true);
+            username = user;
             socket.emit('login_auth', true);
+            console.log('emitted');
         } else {
             console.log('failure');
             socket.emit('login_auth', false);
         }
     });
   });
+  setInterval(function() { 
+    if (username) {
+        var user = userCollection.find({username: username})
+        user.each(function(err, doc) {
+            if(err)
+                throw err;
+            if(doc==null)
+                return;
+            console.log(doc.contacts);
+            socket.emit('contacts', doc.contacts);
+        });
+        // socket.emit('contacts', 'some stuff');
+    }
+  }, 5000);
   // socket.on('message', function(data) {
   //   console.log('got message!' + data);
   //   socket.emit('response', 'hello ' + data);
