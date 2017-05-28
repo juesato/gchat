@@ -43,6 +43,7 @@ class Socket():
         self.mainSocket.on('login_auth', self.process_auth)
         self.mainSocket.on('contacts', self.get_contacts)
         self.mainSocket.on('chat', self.new_msg)
+        self.mainSocket.on('friend_status', self.update_friend_status)
         while not self.should_stop:
             self.log.write('waiting...\n')
             self.log.flush()
@@ -58,7 +59,33 @@ class Socket():
 
     def get_contacts(self, *args):
         self.log.write('contacts!!\n')
+        self.log.write(str(args))
         self.log.flush()
+        
+        contacts = {}
+        for c in args[0]:
+            name = c['username']
+            rel = c['relation']
+            contacts[name] = {}
+            if rel == 'friends':
+                # placeholder
+                contacts[name]['avail'] = 'offline'
+                contacts[name]['status'] = ''
+                self.mainSocket.emit('friend', name)
+            else:
+                contacts[name]['avail'] = rel
+                contacts[name]['status'] = ''
+
+        self.mainWindow.contacts = contacts
+        self.mainWindow.update_status_col()
+
+    def update_friend_status(self, *args):
+        name   = args[0]['username']
+        status = args[0]['status']
+        avail  = args[0]['avail']
+        self.mainWindow.contacts[name]['status'] = status
+        self.mainWindow.contacts[name]['avail'] = avail
+        self.mainWindow.update_status_col()
 
     def new_msg(self, *args):
         pass

@@ -82,6 +82,16 @@ io.on('connection', function(socket) {
         // socket.emit('contacts', 'some stuff');
     }
   }, 5000);
+  socket.on('friend', function(data) {
+    var user = data;
+    userCollection.find({username: user}).toArray(function(err, results) {
+        socket.emit('friend_status', {
+            username: user,
+            status: results[0].status,
+            avail: results[0].availability
+        });
+    });
+  });
   // socket.on('message', function(data) {
   //   console.log('got message!' + data);
   //   socket.emit('response', 'hello ' + data);

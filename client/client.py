@@ -268,11 +268,28 @@ class MainWindow(object):
             self.divider.set_text(("divider", 
                 "Welcome, {0}!".format(self.username)))
             # 3 columns - chat, chat, contacts
-            chat1_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
-            chat2_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
-            contacts_col = urwid.Filler(urwid.Text(self.username), valign='top')
+
+            # placeholders
+            self.status = ""
+            self.avail = "available"
+            self.contacts = []
+            self.chat1_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
+            self.chat2_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
+            self.contacts_col = urwid.Filler(urwid.Text(self.username), valign='top')
             self.context.body.body = urwid.Columns([
-                chat1_col, chat2_col, contacts_col])
+                self.chat1_col, self.chat2_col, self.contacts_col])
+
+    def update_status_col(self):
+        s = '{0}\n{1}\n{2}\n'.format(
+            self.username, self.avail, self.status)
+        for contact in self.contacts:
+            avail = self.contacts[contact]['avail']
+            status = self.contacts[contact]['status']
+            s += '{0}\n{1}\n{2}\n'.format(
+                contact, avail, status)
+        log.write(s)
+        log.flush()
+        self.contacts_col.body.set_text(s)
 
     def accept_login(self):
         self.state = MainWindow.MAIN
