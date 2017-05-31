@@ -23,6 +23,12 @@ class Socket():
     def on_msg_response(self, *args):
         self.log.write('GOT RESPONSE: ' + str(args))
 
+    def get_chat_log(self, handle):
+        self.mainSocket.emit('history', {
+                'username': self.mainWindow.username,
+                'recip': handle
+            })
+
     def login(self, user, passwd, mainWindow):
         self.log.write('Make req\n')
         self.log.flush()
@@ -40,6 +46,7 @@ class Socket():
 
     def poll(self):
         # This is such a poorly designed callback system. I'm so upset
+        self.mainSocket.on('history', self.mainWindow.update_chat_log)
         self.mainSocket.on('login_auth', self.process_auth)
         self.mainSocket.on('contacts', self.get_contacts)
         self.mainSocket.on('chat', self.new_msg)

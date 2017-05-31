@@ -3,6 +3,9 @@
 
 # code extracted from nigiri
 
+# Need to fix bug due to pressing enter twice
+# May need to fix entering wrong pwd
+
 import os
 import datetime
 import sys
@@ -11,6 +14,8 @@ import re
 import logging
 import locale
 import commands
+import threading
+import time
 
 import urwid
 from urwid import MetaSignals
@@ -197,10 +202,22 @@ class MainWindow(object):
         urwid.canvas.CanvasCache.invalidate = classmethod(invalidate)
 
         try:
+            self.should_stop = False
+            def refreshScreen(mainloop):
+                return
+                # while not self.should_stop:
+                #     mainloop.draw_screen()
+                #     time.sleep(0.2)
+            self.refresh = threading.Thread(target=refreshScreen, args=(self.main_loop,))
+            self.refresh.start()
             self.main_loop.run()
+            # self.main_loop.run()
+
         except KeyboardInterrupt:
             self.sock.should_stop = True
             self.sock.listener.join()
+            self.should_stop = True
+            self.refresh.join()
             self.quit()
 
 
@@ -265,6 +282,8 @@ class MainWindow(object):
             self.context.body.body = urwid.Filler(urwid.Text("username: " + self.username))
             self.divider.set_text(("divider", "Enter your password"))
         if self.state == MainWindow.MAIN:
+            log.write('process main\n')
+            log.flush()
             self.divider.set_text(("divider", 
                 "Welcome, {0}!".format(self.username)))
             # 3 columns - chat, chat, contacts
@@ -273,11 +292,29 @@ class MainWindow(object):
             self.status = ""
             self.avail = "available"
             self.contacts = []
-            self.chat1_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
-            self.chat2_col = urwid.Filler(urwid.Text("Empty chat"), valign='top')
+            self.recipient = None
+            # These should be headers rather than text fields
+            self.recips = [None, None]
+            self.active_recip = None
+            self.friends = []
+            self.chat_heads = [urwid.Text("Empty chat"), urwid.Text("Empty chat")]
+            # self.chat_bodys = [urwid.Filler(urwid.Pile([]), valign='top'), \
+            #                    urwid.Filler(urwid.Pile([]), valign='top')]
+            self.chat_walkers = [urwid.SimpleListWalker([]), urwid.SimpleListWalker([])]
+            self.chat_bodys = [ExtendedListBox(self.chat_walkers[0]), 
+                               ExtendedListBox(self.chat_walkers[1])]
+            self.chat_cols = [urwid.Frame(self.chat_bodys[0], header=self.chat_heads[0]), \
+                              urwid.Frame(self.chat_bodys[1], header=self.chat_heads[1])]
             self.contacts_col = urwid.Filler(urwid.Text(self.username), valign='top')
+
             self.context.body.body = urwid.Columns([
-                self.chat1_col, self.chat2_col, self.contacts_col])
+                self.chat_cols[0], self.chat_cols[1], self.contacts_col], dividechars=3)
+            self.main_loop.draw_screen()
+
+    def is_friend(self, avail):
+        if avail == "available" or avail == "offline":
+            return True
+        return False
 
     def update_status_col(self):
         s = '{0}\n{1}\n{2}\n'.format(
@@ -285,11 +322,18 @@ class MainWindow(object):
         for contact in self.contacts:
             avail = self.contacts[contact]['avail']
             status = self.contacts[contact]['status']
+            if self.is_friend(avail) and contact not in self.friends:
+                self.friends.append(contact)
             s += '{0}\n{1}\n{2}\n'.format(
                 contact, avail, status)
-        log.write(s)
-        log.flush()
-        self.contacts_col.body.set_text(s)
+
+        # urwid.disconnect_signal(self.contacts_col.body, "modified", self.contacts_col.body._invalidate)
+        # self.contacts_col.body = body
+        self.contacts_col.body.set_text(('', s))
+        # self.contacts_col.body._invalidate()
+        # urwid.connect_signal(self.contacts_col.body, "modified", self.contacts_col.body._invalidate)
+
+        self.main_loop.draw_screen()
 
     def accept_login(self):
         self.state = MainWindow.MAIN
@@ -303,13 +347,104 @@ class MainWindow(object):
         self.process_state()
 
     def open_chat(self, user):
+        log.write('open_chat' + str(self.friends) + '\n')
+        log.flush()
+        if user not in self.friends:
+            return
+        try:
+            self.active_recip = self.recips.index(user)
+        except ValueError:
+            updated_recips = self.recips[:]
+            # (1 -> 2), fill 1
+            if updated_recips[0]:
+                updated_recips[1] = updated_recips[0]
+
+            updated_recips[0] = user
+            self.active_recip = 0
+            self.update_open_chats(updated_recips)
+            log.write('HEY\n')
+            log.write(str(updated_recips))
+            log.flush()
+
+        self.update_active_recip()
         pass
+
+    def update_open_chats(self, recips):
+        for i in xrange(len(recips)):
+            if recips[i] is not self.recips[i]:
+                self.recips[i] = recips[i]
+                self.chat_heads[i].set_text(('text', recips[i]))
+                # will update on callback
+                msgs = self.sock.get_chat_log(recips[i])
+
+    def update_active_recip(self):
+        for i in xrange(len(self.recips)):
+            recip = self.chat_cols[i]._header.get_text()[0]
+            if '>> ' in recip:
+                recip = recip.split('>> ')[1]
+            self.chat_heads[i].set_text(('text', recip))
+        i = self.active_recip
+        recip = self.recips[i]
+        log.write('\nbold ' + recip)
+        log.flush()
+        self.chat_heads[i].set_text(('bold_text', '>> ' + recip))
+        pass
+
+
+    def update_chat_log(self, data):
+        log.write('update_chat\n')
+        log.flush()
+        try:
+            recip = data['recip']
+            chatlog = data['log']
+        except KeyError:
+            # no existing chat
+            return
+        for i in xrange(len(self.recips)):
+            if recip != self.recips[i]:
+                continue
+            msg_widgets = []
+            for m in chatlog:
+                align = 'right' if m['sender'] == self.username else 'left'
+                # msg_widgets.append((urwid.Text(m['msg'], align=align), ('pack', None)))
+                msg_widgets.append(urwid.Text(m['msg'], align=align))
+            # log.write('UPDATE\n' + str(msg_widgets))
+            # log.flush()
+            # log.write(str(type(self.chat_bodys[i].body)))
+            # log.flush()
+
+            del self.chat_walkers[i].contents[:]
+            for w in msg_widgets:
+                self.chat_walkers[i].contents.append(w)
+            self.chat_bodys[i].scroll_to_bottom()
+
+        self.main_loop.draw_screen()
 
     def update_status(self, status):
         pass
 
     def send_chat(self, msg):
-        pass
+        try:
+            log.write(str(self.recips))
+            log.write(str(self.active_recip))
+            log.flush()
+            receiver = self.recips[self.active_recip]
+        except:
+            return
+        # log.write('send_chat' + str(self.active_recip) + str(self.recips) + self.recips[self.active_recip])
+        log.write('send_chat' + receiver)
+        log.flush()
+        self.sock.mainSocket.emit('msg', {
+            'username': self.username, 
+            'msg': msg,
+            'receiver': receiver
+        })
+
+        # Add it to your own view
+        w = urwid.Text(msg, align='right')
+        # w = (urwid.Text(msg, align='right'), ('pack', None))
+        self.chat_walkers[self.active_recip].contents.append(w)
+        self.chat_bodys[self.active_recip].scroll_to_bottom()
 
     def transition_state(self, text):
         old_state = self.state
@@ -338,10 +473,12 @@ class MainWindow(object):
         elif self.state == MainWindow.LOGIN_PASSWORD:
             self.sock.login(self.username, text, self)
         elif self.state == MainWindow.MAIN:
+            log.write('good\n')
+            log.flush()
             if text.startswith('\\chat'):
                 user = text.split('\\chat')[1].strip()
                 self.open_chat(user)
-            if text.startswith('\\status'):
+            elif text.startswith('\\status'):
                 status = text.split('\\status')[1].strip()
                 self.update_status(status)
             else:

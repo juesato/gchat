@@ -28,6 +28,7 @@ var chatCollection;
 MongoClient.connect('mongodb://127.0.0.1:27017/gchat', function(err, db) {
 if(err) throw err;
 userCollection = db.collection('users');
+chatCollection = db.collection('chats');
 // chatCollection = db.collection('chats');
 
 // db.collection('users').findAndModify(
@@ -49,6 +50,16 @@ var app = http.createServer(function (req, res) {
 
 var io = require('socket.io')(app);
 
+function alpha(name1, name2) {
+    if (name1 < name2) {
+        return [name1, name2];
+    } else {
+        return [name2, name1];
+    }
+}
+
+var user_to_socket = {}
+
 io.on('connection', function(socket) {
   console.log("CONNECTION!");
   var username = false;
@@ -59,7 +70,13 @@ io.on('connection', function(socket) {
     userCollection.find({username:user, password:pass}).toArray(function(err, results){
         if (results.length) {
             console.log('success');
+            userCollection.update({username: user}, {
+                $set: {
+                    availability: ONLINE
+                }
+            });
             username = user;
+            user_to_socket[user] = socket
             socket.emit('login_auth', true);
             console.log('emitted');
         } else {
@@ -92,13 +109,68 @@ io.on('connection', function(socket) {
         });
     });
   });
-  // socket.on('message', function(data) {
-  //   console.log('got message!' + data);
-  //   socket.emit('response', 'hello ' + data);
-  // });
-  // socket.on('emit', function() {
-  //   socket.emit('emit_response');
-  // });
+  socket.on('msg', function(data) {
+    time = new Date();
+    console.log('got message!' + data);
+    var sender = data['username'];
+    var recip  = data['receiver'];    
+    var msg = data['msg'];
+    var names = alpha(sender, recip);
+    var name1 = names[0];
+    var name2 = names[1];
+    var k = name1 + name2;
+    console.log('key', k);
+    chatCollection.findAndModify(
+        {'participants': [name1, name2]}, [],
+        {$setOnInsert: {log: []}},
+        {
+            new: true,    // return new doc if one is upserted
+            upsert: true
+        } // insert the document if it does not exist
+    , function(err, res) {
+        chatCollection.update({'participants': [name1, name2]}, {
+            $push: {
+                log : {
+                    sender: sender,
+                    recip: recip,
+                    msg: msg,
+                    timestamp: time.getHours() + ":" + time.getMinutes() + ":" + time.getSeconds() 
+                }
+            }
+        });
+        console.log('got msg', msg, err, res);
+    });
+    if (recip in user_to_socket) {
+        sendHistory({username: recip, recip: sender});
+    }
+  });
+  function sendHistory(data) {
+    var sender = data['username'];
+    var recip = data['recip'];
+    var names = alpha(sender, recip);
+    var name1 = names[0];
+    var name2 = names[1];
+    chatCollection.find({'participants': [name1, name2]}).toArray(function(err, results) {
+        if (!results.length) return;
+        console.log('len', results.length);
+        socket.emit('history', {
+            recip: recip,
+            log: results[0].log
+        });
+    });
+  }
+  socket.on('history', sendHistory);
+  socket.on('disconnect', function() {
+    console.log('Got disconnect!');
+    userCollection.find({username:username}).toArray(function(err, results){
+        userCollection.update({username: username}, {
+            $set: {
+                availability: OFFLINE
+            }
+        });
+        delete user_to_socket[username];
+    });
+  });
 });
 
 app.listen(8000);
