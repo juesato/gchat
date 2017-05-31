@@ -338,6 +338,7 @@ class MainWindow(object):
     def accept_login(self):
         self.state = MainWindow.MAIN
         self.process_state()
+        # log = open('log_{0}.txt'.format(self.username), 'w')
         log.write('accept\n')
         log.flush()
         # self.sock.listener.start() # this is terrible
@@ -390,9 +391,12 @@ class MainWindow(object):
         self.chat_heads[i].set_text(('bold_text', '>> ' + recip))
         pass
 
+    def debugCb(self, data):
+        log.write('DEBUGCB\n')
+        log.flush()
 
     def update_chat_log(self, data):
-        log.write('update_chat\n')
+        log.write('\nupdate_chat_log ' + self.username + '\n')
         log.flush()
         try:
             recip = data['recip']
@@ -400,18 +404,21 @@ class MainWindow(object):
         except KeyError:
             # no existing chat
             return
+        # open the chat if it's not open yet
+        if recip not in self.recips:
+            self.open_chat(recip)
+        else:
+            self.active_recip = self.recips.index(recip)        
+            self.update_active_recip()
+
+        # add the messages to the chatbox
         for i in xrange(len(self.recips)):
             if recip != self.recips[i]:
                 continue
             msg_widgets = []
             for m in chatlog:
                 align = 'right' if m['sender'] == self.username else 'left'
-                # msg_widgets.append((urwid.Text(m['msg'], align=align), ('pack', None)))
                 msg_widgets.append(urwid.Text(m['msg'], align=align))
-            # log.write('UPDATE\n' + str(msg_widgets))
-            # log.flush()
-            # log.write(str(type(self.chat_bodys[i].body)))
-            # log.flush()
 
             del self.chat_walkers[i].contents[:]
             for w in msg_widgets:

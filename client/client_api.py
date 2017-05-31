@@ -51,6 +51,7 @@ class Socket():
         self.mainSocket.on('contacts', self.get_contacts)
         self.mainSocket.on('chat', self.new_msg)
         self.mainSocket.on('friend_status', self.update_friend_status)
+        self.mainSocket.on('debug', self.mainWindow.debugCb)
         while not self.should_stop:
             self.log.write('waiting...\n')
             self.log.flush()

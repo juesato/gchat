@@ -78,6 +78,7 @@ io.on('connection', function(socket) {
             username = user;
             user_to_socket[user] = socket
             socket.emit('login_auth', true);
+            sendContacts();
             console.log('emitted');
         } else {
             console.log('failure');
@@ -85,7 +86,7 @@ io.on('connection', function(socket) {
         }
     });
   });
-  setInterval(function() { 
+  function sendContacts() { 
     if (username) {
         var user = userCollection.find({username: username})
         user.each(function(err, doc) {
@@ -98,7 +99,8 @@ io.on('connection', function(socket) {
         });
         // socket.emit('contacts', 'some stuff');
     }
-  }, 5000);
+  }
+  setInterval(sendContacts, 5000);
   socket.on('friend', function(data) {
     var user = data;
     userCollection.find({username: user}).toArray(function(err, results) {
@@ -137,29 +139,36 @@ io.on('connection', function(socket) {
                     timestamp: time.getHours() + ":" + time.getMinutes() + ":" + time.getSeconds() 
                 }
             }
+        },
+        function() {
+            if (recip in user_to_socket) {
+                console.log('send to receiver', recip, sender);
+                historyCb(user_to_socket[recip])({username: recip, recip: sender});
+            }
         });
         console.log('got msg', msg, err, res);
     });
-    if (recip in user_to_socket) {
-        sendHistory({username: recip, recip: sender});
-    }
   });
-  function sendHistory(data) {
-    var sender = data['username'];
-    var recip = data['recip'];
-    var names = alpha(sender, recip);
-    var name1 = names[0];
-    var name2 = names[1];
-    chatCollection.find({'participants': [name1, name2]}).toArray(function(err, results) {
-        if (!results.length) return;
-        console.log('len', results.length);
-        socket.emit('history', {
-            recip: recip,
-            log: results[0].log
+  function historyCb(socket) {
+    return function(data) {
+        console.log('EMIT DEBUG');
+        socket.emit('debug', 'asdf');
+        var sender = data['username'];
+        var recip = data['recip'];
+        var names = alpha(sender, recip);
+        var name1 = names[0];
+        var name2 = names[1];
+        chatCollection.find({'participants': [name1, name2]}).toArray(function(err, results) {
+            if (!results.length) return;
+            console.log('send history', results.length, name1, name2);
+            socket.emit('history', {
+                recip: recip,
+                log: results[0].log
+            });
         });
-    });
+    }
   }
-  socket.on('history', sendHistory);
+  socket.on('history', historyCb(socket));
   socket.on('disconnect', function() {
     console.log('Got disconnect!');
     userCollection.find({username:username}).toArray(function(err, results){
