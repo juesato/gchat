@@ -7,11 +7,18 @@ a quick chat client modelled after gchat, made for my friends
 
 Tested on Ubuntu 14.04:
 ```bash
+  git clone https://github.com/juesato/gchat
   sudo apt-get install python-urwid
   sudo pip install -U socketIO-client
 ```
 
 For OSX I assume brew instead of apt should work.
+
+To run:
+```
+  cd gchat/client
+  python client.py
+```
 
 ## Things you should know
 
