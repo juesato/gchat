@@ -89,7 +89,7 @@ io.on('connection', function(socket) {
     });
   });
   socket.on('friend_request', function(data) {
-    userCollection.update({username:data}, {
+    userCollection.findAndModify({username:data}, {
         $push: {
             contacts: {
                 username: username,
@@ -100,6 +100,7 @@ io.on('connection', function(socket) {
     function(err, doc) {
         // if it worked and the other username exists, add it
         if (err) return;
+        if (!doc.username) return;
         userCollection.update({username: username}, {
             $push: {
                 contacts: {

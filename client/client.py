@@ -27,7 +27,7 @@ from client_api import Socket
 # logging.getLogger('socketIO-client').setLevel(logging.DEBUG)
 logging.basicConfig()
 
-log = open('log.txt', 'w')
+DEBUG = False
 
 class ExtendedListBox(urwid.ListBox):
     """
@@ -148,7 +148,14 @@ class MainWindow(object):
     def __init__(self, sender="1234567890"):
         self.shall_quit = False
         self.sender = sender
+        if DEBUG:
+            self.log = open('log.txt', 'w')
 
+    def debug(self, msg):
+        if DEBUG:
+            self.log.write(msg)
+            self.log.write('\n')
+            self.log.flush()
 
     def main(self):
         """ 
@@ -386,12 +393,10 @@ class MainWindow(object):
         pass
 
     def debugCb(self, data):
-        # log.write('debug\n')
-        log.flush()
+        pass
 
     def update_chat_log(self, data):
-        log.write('\nupdate_chat_log ' + self.username + '\n')
-        log.flush()
+        self.debug('update_chat_log ' + self.username)
         try:
             recip = data['recip']
             chatlog = data['log']
@@ -450,9 +455,7 @@ class MainWindow(object):
             receiver = self.recips[self.active_recip]
         except:
             return
-        # log.write('send_chat' + str(self.active_recip) + str(self.recips) + self.recips[self.active_recip])
-        log.write('send_chat' + receiver)
-        log.flush()
+        self.debug('send_chat' + receiver)
         self.sock.mainSocket.emit('msg', {
             'username': self.username, 
             'msg': msg,
