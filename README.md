@@ -25,6 +25,7 @@ The UI is pretty raw. You need to type some commands to do things.
 * `\friend username` to add `username` as a contact
 * `\chat username` to start a chat with `username`
 * `\status asdf asdf asdf` to set your status
+* ctrl + c to logout
 
 Re: security - there's no security implemented whatsoever. I promise not to look at your chats! Incidentally, they'll also be deleted at least once a day (i.e. after that chat hasn't been used for some period of time). Also, passwords are communicated directly over plaintext and not hidden while you type them.
 
