@@ -2,6 +2,7 @@
 
 a quick chat client modelled after gchat, made for my friends
 
+![Screenshot](img/demo.png)
 
 ## Installation
 
