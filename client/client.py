@@ -16,6 +16,7 @@ import locale
 import commands
 import threading
 import time
+import random
 
 import urwid
 from urwid import MetaSignals
@@ -268,12 +269,14 @@ class MainWindow(object):
 
     def process_state(self):
         if self.state == MainWindow.START:
+            self.context.body.body = urwid.Filler(urwid.Text(""))
             self.divider.set_text(("divider", "type 'login' or 'signup' to start"))
         if self.state == MainWindow.SIGNUP:
-            self.context.body.body = urwid.Filler(urwid.Text("Enter your username below:"))
+            # self.context.body.body = urwid.Filler(urwid.Text("Enter your username below:"))
             self.divider.set_text(("divider", "Enter your username"))
         if self.state == MainWindow.SIGNUP_PASSWORD:
-            self.context.body.body = urwid.Filler(urwid.Text("username: " + self.username))
+            self.context.body.body = urwid.Filler(urwid.Text(""))
+            # self.context.body.body = urwid.Filler(urwid.Text("username: " + self.username))
             self.divider.set_text(("divider", "Make a password"))
         if self.state == MainWindow.LOGIN:
             self.context.body.body = urwid.Filler(urwid.Text("Enter your username below:"))
@@ -281,9 +284,11 @@ class MainWindow(object):
         if self.state == MainWindow.LOGIN_PASSWORD:
             self.context.body.body = urwid.Filler(urwid.Text("username: " + self.username))
             self.divider.set_text(("divider", "Enter your password"))
+        if self.state == MainWindow.SIGNUP_EMAIL:
+            self.divider.set_text(("divider", "Enter your email address"))
+        if self.state == MainWindow.SIGNUP_CONFIRMATION:
+            self.divider.set_text(("divider", "Enter confirmation code sent to your email"))
         if self.state == MainWindow.MAIN:
-            log.write('process main\n')
-            log.flush()
             self.divider.set_text(("divider", 
                 "Welcome, {0}!".format(self.username)))
             # 3 columns - chat, chat, contacts
@@ -324,7 +329,7 @@ class MainWindow(object):
             status = self.contacts[contact]['status']
             if self.is_friend(avail) and contact not in self.friends:
                 self.friends.append(contact)
-            s += '{0}\n{1}\n{2}\n'.format(
+            s += '\n{0}\n{1}\n{2}\n'.format(
                 contact, avail, status)
 
         # urwid.disconnect_signal(self.contacts_col.body, "modified", self.contacts_col.body._invalidate)
@@ -338,18 +343,12 @@ class MainWindow(object):
     def accept_login(self):
         self.state = MainWindow.MAIN
         self.process_state()
-        # log = open('log_{0}.txt'.format(self.username), 'w')
-        log.write('accept\n')
-        log.flush()
-        # self.sock.listener.start() # this is terrible
 
     def reject_login(self):
         self.state = MainWindow.LOGIN
         self.process_state()
 
     def open_chat(self, user):
-        log.write('open_chat' + str(self.friends) + '\n')
-        log.flush()
         if user not in self.friends:
             return
         try:
@@ -363,9 +362,6 @@ class MainWindow(object):
             updated_recips[0] = user
             self.active_recip = 0
             self.update_open_chats(updated_recips)
-            log.write('HEY\n')
-            log.write(str(updated_recips))
-            log.flush()
 
         self.update_active_recip()
         pass
@@ -386,13 +382,11 @@ class MainWindow(object):
             self.chat_heads[i].set_text(('text', recip))
         i = self.active_recip
         recip = self.recips[i]
-        log.write('\nbold ' + recip)
-        log.flush()
         self.chat_heads[i].set_text(('bold_text', '>> ' + recip))
         pass
 
     def debugCb(self, data):
-        log.write('DEBUGCB\n')
+        # log.write('debug\n')
         log.flush()
 
     def update_chat_log(self, data):
@@ -428,13 +422,31 @@ class MainWindow(object):
         self.main_loop.draw_screen()
 
     def update_status(self, status):
-        pass
+        self.status = status
+        self.sock.mainSocket.emit('status_update', status)
+
+    def update_my_status(self, data):
+        self.status = data
+
+    def add_friend(self, user):
+        self.sock.mainSocket.emit('friend_request', user)
+
+    def send_confirmation_email(self, email):
+        self.confirmation_key = random.randint(1000, 9999)
+        self.sock.mainSocket.emit('email_confirmation', {
+                'email': email,
+                'key': str(self.confirmation_key)
+            })
+
+    def register_new_account(self):
+        self.sock.mainSocket.emit('new_account', {
+                'email': self.email,
+                'username': self.username,
+                'password': self.password
+            })
 
     def send_chat(self, msg):
         try:
-            log.write(str(self.recips))
-            log.write(str(self.active_recip))
-            log.flush()
             receiver = self.recips[self.active_recip]
         except:
             return
@@ -467,12 +479,19 @@ class MainWindow(object):
                 self.state = MainWindow.SIGNUP_PASSWORD
         elif self.state == MainWindow.SIGNUP_PASSWORD:
             if text.strip():
-                # authenticate(self.username, text)
+                self.password = text
                 self.state = MainWindow.SIGNUP_EMAIL
         elif self.state == MainWindow.SIGNUP_EMAIL:
             if text.strip():
+                self.email = text
+                self.send_confirmation_email(self.email)
                 # send_confirmation_email(text)
-                self.state = SIGNUP_CONFIRMATION
+                self.state = MainWindow.SIGNUP_CONFIRMATION
+        elif self.state == MainWindow.SIGNUP_CONFIRMATION:
+            if text.strip():
+                if text == str(self.confirmation_key):
+                    self.register_new_account()
+                    self.state = MainWindow.START
         elif self.state == MainWindow.LOGIN:
             if text.strip():
                 self.username = text
@@ -480,14 +499,15 @@ class MainWindow(object):
         elif self.state == MainWindow.LOGIN_PASSWORD:
             self.sock.login(self.username, text, self)
         elif self.state == MainWindow.MAIN:
-            log.write('good\n')
-            log.flush()
             if text.startswith('\\chat'):
                 user = text.split('\\chat')[1].strip()
                 self.open_chat(user)
             elif text.startswith('\\status'):
                 status = text.split('\\status')[1].strip()
                 self.update_status(status)
+            elif text.startswith('\\friend'):
+                user = text.split('\\friend')[1].strip()
+                self.add_friend(user)
             else:
                 self.send_chat(text)
 
@@ -530,7 +550,6 @@ class MainWindow(object):
             if text.strip():
                 self.print_sent_message(text)
                 self.print_received_message('Answer')
-                log.write('hello'); log.flush()
                 self.transition_state(text)
 
         else:

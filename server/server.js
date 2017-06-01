@@ -22,6 +22,8 @@ var PENDING = 'pending'
 var util = require('util'),  
     http = require('http');
 
+var exec = require('child_process').exec;
+
 var MongoClient = require('mongodb').MongoClient
 var userCollection;
 var chatCollection;
@@ -78,12 +80,35 @@ io.on('connection', function(socket) {
             username = user;
             user_to_socket[user] = socket
             socket.emit('login_auth', true);
+            socket.emit('my_status', results[0].status)
             sendContacts();
             console.log('emitted');
         } else {
             console.log('failure');
             socket.emit('login_auth', false);
         }
+    });
+  });
+  socket.on('friend_request', function(data) {
+    userCollection.update({username:data}, {
+        $push: {
+            contacts: {
+                username: username,
+                relation: FRIENDS
+            }
+        }
+    },
+    function(err, doc) {
+        // if it worked and the other username exists, add it
+        if (err) return;
+        userCollection.update({username: username}, {
+            $push: {
+                contacts: {
+                    username: data,
+                    relation: FRIENDS
+                }
+            }
+        });
     });
   });
   function sendContacts() { 
@@ -180,7 +205,49 @@ io.on('connection', function(socket) {
         delete user_to_socket[username];
     });
   });
+    socket.on('status_update', function(data) {
+        console.log('update status for ' + username + ' to ' + data);
+        userCollection.update({username: username}, {
+            $set: {
+                status: data
+            }
+        });
+    });
+    socket.on('email_confirmation', function(data) {
+        var email = data['email'];
+        var key = data['key'];
+        var cmd = 'echo "' + key + '" | mail -s "Your account confirmation code" ' + email;
+        console.log('email_confirmation');
+        console.log(cmd);
+        exec(cmd, function(error, stdout, stderr) {});
+    });
+    socket.on('new_account', function(data) {
+        var is_unique = true;
+        userCollection.find({username: data['username']}).toArray(function(err, results) {
+            if (results.length > 0) {
+                console.log('not unique');
+                return;
+            }
+            userCollection.insert({
+                username: data['username'],
+                password: data['password'],
+                email: data['email'],
+                availability: OFFLINE,
+                status: '',
+                contacts: []
+            }, function(err, doc) {
+                if (err) console.log('error');
+                console.log('new account!'); 
+            });
+        });
+    })
 });
+
+function emailAndClearLogs() {
+
+}
+
+setInterval(emailAndClearLogs, 0.1 * 5*60*1000);
 
 app.listen(8000);
 /* server started */
