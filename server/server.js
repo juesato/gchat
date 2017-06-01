@@ -82,7 +82,6 @@ io.on('connection', function(socket) {
             socket.emit('login_auth', true);
             socket.emit('my_status', results[0].status)
             sendContacts();
-            console.log('emitted');
         } else {
             console.log('failure');
             socket.emit('login_auth', false);
@@ -115,11 +114,8 @@ io.on('connection', function(socket) {
     if (username) {
         var user = userCollection.find({username: username})
         user.each(function(err, doc) {
-            if(err)
-                throw err;
-            if(doc==null)
-                return;
-            console.log(doc.contacts);
+            if (err) throw err;
+            if (doc == null) return;
             socket.emit('contacts', doc.contacts);
         });
         // socket.emit('contacts', 'some stuff');
@@ -146,7 +142,6 @@ io.on('connection', function(socket) {
     var name1 = names[0];
     var name2 = names[1];
     var k = name1 + name2;
-    console.log('key', k);
     chatCollection.findAndModify(
         {'participants': [name1, name2]}, [],
         {$setOnInsert: {log: []}},
@@ -161,7 +156,8 @@ io.on('connection', function(socket) {
                     sender: sender,
                     recip: recip,
                     msg: msg,
-                    timestamp: time.getHours() + ":" + time.getMinutes() + ":" + time.getSeconds() 
+                    timestamp: time,
+                    timestr: time.getHours() + ":" + time.getMinutes() + ":" + time.getSeconds() 
                 }
             }
         },
@@ -171,13 +167,10 @@ io.on('connection', function(socket) {
                 historyCb(user_to_socket[recip])({username: recip, recip: sender});
             }
         });
-        console.log('got msg', msg, err, res);
     });
   });
   function historyCb(socket) {
     return function(data) {
-        console.log('EMIT DEBUG');
-        socket.emit('debug', 'asdf');
         var sender = data['username'];
         var recip = data['recip'];
         var names = alpha(sender, recip);
@@ -243,11 +236,62 @@ io.on('connection', function(socket) {
     })
 });
 
-function emailAndClearLogs() {
-
+function sendEmail(username, body, subj) {
+    console.log('sendEmail', username, body, subj);
+    userCollection.find({username: username}).toArray(function(err, res) {
+        if (res.length == 0) return;
+        var email = res[0]['email'];
+        var cmd = 'echo "' + body + '" | mail -s "' + subj + '" ' + email;
+        console.log('sending email');
+        console.log(cmd);
+        exec(cmd, function(error, stdout, stderr) {});
+    });
 }
 
-setInterval(emailAndClearLogs, 0.1 * 5*60*1000);
+function emailAndClearLogs() {
+    var cursor = chatCollection.find({})
+    cursor.each(function(err, doc) {
+        if (err) throw err;
+        if (!doc) return; // really unclear why i have to do this
+        if (!('participants' in doc)) {
+            console.log('broken entry', doc);
+            return;
+        }
+        var participants = doc['participants'];
+        var name1 = participants[0];
+        var name2 = participants[1];
+        var l = doc['log'].length;
+        var five_mins = 5 * 60 * 1000;
+        // var five_mins = 5 * 60 * 1000 * 0.02;
+        var now = new Date();
+        if (now - doc['log'][l-1]['timestamp'] > five_mins) {
+            console.log('chat finished');
+            // clear and email
+            var email_body = ''
+            for (i = 0; i < l; i++) {
+                var sender = doc['log'][i]['sender'];
+                var msg = doc['log'][i]['msg'];
+                var timestr = doc['log'][i]['timestr'];
+                email_body += sender + ' (' +  timestr + '): ' + msg + '\n';
+            }
+            email_body = email_body.replace('\\', '\\\\'); // escape backslashes
+            email_body = email_body.replace('"', '\\"');
+            sendEmail(name1, email_body, 'Chat with ' + name2 + ' (' + l.toString() + ' lines)')
+            sendEmail(name2, email_body, 'Chat with ' + name1 + ' (' + l.toString() + ' lines)')
+
+            // delete log
+            chatCollection.remove({participants: participants},
+                function(err, object) {
+                    if(err) throw err;
+                    console.log("document deleted", participants);
+                }
+            );
+        }
+    });
+}
+
+// setInterval(emailAndClearLogs, 0.02 * 5*60*1000);
+setInterval(emailAndClearLogs, 5*60*1000);
 
 app.listen(8000);
 /* server started */
