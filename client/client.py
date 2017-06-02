@@ -238,7 +238,6 @@ class MainWindow(object):
         self.shall_quit = True
 
         if exit:
-            log.close()
             sys.exit(0)
 
 
