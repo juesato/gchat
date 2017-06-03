@@ -89,8 +89,9 @@ io.on('connection', function(socket) {
     });
   });
   socket.on('friend_request', function(data) {
-    userCollection.findAndModify({username:data}, {
-        $push: {
+    var sort = { 'username': -1 };
+    userCollection.findAndModify({username: {$eq: data}}, sort, {
+        $addToSet: {
             contacts: {
                 username: username,
                 relation: FRIENDS
@@ -99,10 +100,11 @@ io.on('connection', function(socket) {
     },
     function(err, doc) {
         // if it worked and the other username exists, add it
+        // console.log('cb', err, doc);
         if (err) return;
-        if (!doc.username) return;
-        userCollection.update({username: username}, {
-            $push: {
+        if (!doc || !doc.value || !doc.value.username) return;
+        userCollection.findAndModify({username: {$eq: username}}, sort, {
+            $addToSet: {
                 contacts: {
                     username: data,
                     relation: FRIENDS
