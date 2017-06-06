@@ -22,6 +22,8 @@ var PENDING = 'pending'
 var util = require('util'),  
     http = require('http');
 
+var fs = require('fs');
+
 var exec = require('child_process').exec;
 
 var MongoClient = require('mongodb').MongoClient
@@ -240,14 +242,26 @@ io.on('connection', function(socket) {
 });
 
 function sendEmail(username, body, subj) {
+    var fname = 'tmp' + Math.floor(Math.random() * 100000).toString() + '.txt';
     console.log('sendEmail', username, body, subj);
     userCollection.find({username: username}).toArray(function(err, res) {
         if (res.length == 0) return;
         var email = res[0]['email'];
-        var cmd = 'echo "' + body + '" | mail -s "' + subj + '" ' + email;
-        console.log('sending email');
-        console.log(cmd);
-        exec(cmd, function(error, stdout, stderr) {});
+        fs.writeFile(fname, body, function(err) {
+            if (err) return console.log(err);
+            var cmd = 'cat ' + fname + ' | mail -s "' + subj + '" ' + email;
+            console.log('sending email');
+            console.log(cmd);
+            exec(cmd, function(error, stdout, stderr) {
+                fs.stat(fname, function (err, stats) {
+                    if (err) return console.log(err);
+                    fs.unlink(fname ,function(err) {
+                        if(err) return console.log(err);
+                        console.log('file deleted successfully');
+                    });
+                });
+            });
+        });
     });
 }
 
@@ -264,8 +278,8 @@ function emailAndClearLogs() {
         var name1 = participants[0];
         var name2 = participants[1];
         var l = doc['log'].length;
-        var five_mins = 5 * 60 * 1000;
-        // var five_mins = 5 * 60 * 1000 * 0.02;
+        // var five_mins = 5 * 60 * 1000;
+        var five_mins = 5 * 60 * 1000 * 0.02;
         var now = new Date();
         if (now - doc['log'][l-1]['timestamp'] > five_mins) {
             console.log('chat finished');
@@ -293,8 +307,8 @@ function emailAndClearLogs() {
     });
 }
 
-// setInterval(emailAndClearLogs, 0.02 * 5*60*1000);
-setInterval(emailAndClearLogs, 5*60*1000);
+setInterval(emailAndClearLogs, 0.02 * 5*60*1000);
+// setInterval(emailAndClearLogs, 5*60*1000);
 
 app.listen(8000);
 /* server started */
